@@ -20,7 +20,7 @@ Usage:
 Reports from the execution of the above command, with all variants included, are within the corresponding report folder in the *HDL* folder.
 
 ## Simulation
-The folder *py_simulation* contains the Python code for the simulations presented in the paper. <b>*Works with PyTorch version 2.7.0*</b>
+The folder *py_simulation* contains the Python code for the simulations presented in the paper. <b>*Works with PyTorch version 2.8.0*</b>
 
 *quantize_toolkit.py* contains all the custom made code, the rest of the *.py* files are the main executables for each neural network.
 
