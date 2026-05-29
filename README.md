@@ -53,3 +53,6 @@ The following functions in *quantize_toolkit.py* will save their results:
 - PTQ_quantize
 - QAT_quantize
 And include a load boolean argument. Setting this argument to true, with previous results saved, will cancel any computations and load the existing results.
+
+## Full results
+Due to space constraints in the paper, a summarized version of the results are published. The full results data are present in the *Full Results.xlsx* excel file in the root of this repository.
