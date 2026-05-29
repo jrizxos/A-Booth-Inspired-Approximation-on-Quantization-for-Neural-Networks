@@ -1,0 +1,31 @@
+ 
+****************************************
+Report : area
+Design : ASP2
+Version: W-2024.09-SP2
+Date   : Tue Apr 21 14:27:07 2026
+****************************************
+
+Information: Updating design information... (UID-85)
+Library(s) Used:
+
+    NangateOpenCellLibrary (File: /home/irizos/Desktop/Approximate-Booth-Research/tcl_work_dir/freepdk-45nm/stdcells.db)
+
+Number of ports:                           49
+Number of nets:                           360
+Number of cells:                          298
+Number of combinational cells:            266
+Number of sequential cells:                32
+Number of macros/black boxes:               0
+Number of buf/inv:                         34
+Number of references:                      18
+
+Combinational area:                335.426004
+Buf/Inv area:                       18.354000
+Noncombinational area:             144.703995
+Macro/Black Box area:                0.000000
+Net Interconnect area:      undefined  (Wire load has zero net area)
+
+Total cell area:                   480.129999
+Total area:                 undefined
+1

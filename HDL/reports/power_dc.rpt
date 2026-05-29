@@ -1,0 +1,58 @@
+ 
+****************************************
+Report : power
+        -analysis_effort low
+Design : ASP2
+Version: W-2024.09-SP2
+Date   : Tue Apr 21 14:27:07 2026
+****************************************
+
+
+Library(s) Used:
+
+    NangateOpenCellLibrary (File: /home/irizos/Desktop/Approximate-Booth-Research/tcl_work_dir/freepdk-45nm/stdcells.db)
+
+
+Operating Conditions: typical   Library: NangateOpenCellLibrary
+Wire Load Model Mode: top
+
+Design        Wire Load Model            Library
+------------------------------------------------
+ASP2                   5K_hvratio_1_1    NangateOpenCellLibrary
+
+
+Global Operating Voltage = 1.1  
+Power-specific unit information :
+    Voltage Units = 1V
+    Capacitance Units = 1.000000ff
+    Time Units = 1ns
+    Dynamic Power Units = 1uW    (derived from V,C,T units)
+    Leakage Power Units = 1nW
+
+
+Attributes
+----------
+i - Including register clock pin internal power
+
+
+  Cell Internal Power  =  31.6919 uW   (65%)
+  Net Switching Power  =  17.1375 uW   (35%)
+                         ---------
+Total Dynamic Power    =  48.8294 uW  (100%)
+
+Cell Leakage Power     =  10.2613 uW
+
+
+                 Internal         Switching           Leakage            Total
+Power Group      Power            Power               Power              Power   (   %    )  Attrs
+--------------------------------------------------------------------------------------------------
+io_pad             0.0000            0.0000            0.0000            0.0000  (   0.00%)
+memory             0.0000            0.0000            0.0000            0.0000  (   0.00%)
+black_box          0.0000            0.0000            0.0000            0.0000  (   0.00%)
+clock_network     14.7044            0.0000            0.0000           14.7044  (  24.88%)  i
+register           4.1816            2.0408        2.5185e+03            8.7410  (  14.79%)
+sequential         0.0000            0.0000            0.0000            0.0000  (   0.00%)
+combinational     12.8059           15.0967        7.7428e+03           35.6454  (  60.32%)
+--------------------------------------------------------------------------------------------------
+Total             31.6919 uW        17.1375 uW     1.0261e+04 nW        59.0908 uW
+1

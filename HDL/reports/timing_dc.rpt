@@ -1,0 +1,87 @@
+ 
+****************************************
+Report : timing
+        -path full
+        -delay max
+        -max_paths 1
+Design : ASP2
+Version: W-2024.09-SP2
+Date   : Tue Apr 21 14:27:07 2026
+****************************************
+
+Operating Conditions: typical   Library: NangateOpenCellLibrary
+Wire Load Model Mode: top
+
+  Startpoint: B_in[1] (input port clocked by main_clk)
+  Endpoint: accumulator_reg_reg[31]
+            (rising edge-triggered flip-flop clocked by main_clk)
+  Path Group: main_clk
+  Path Type: max
+
+  Des/Clust/Port     Wire Load Model       Library
+  ------------------------------------------------
+  ASP2               5K_hvratio_1_1        NangateOpenCellLibrary
+
+  Point                                    Incr       Path
+  -----------------------------------------------------------
+  clock main_clk (rise edge)               0.00       0.00
+  clock network delay (ideal)              0.00       0.00
+  input external delay                     0.00       0.00 f
+  B_in[1] (in)                             0.00       0.00 f
+  U133/ZN (INV_X1)                         0.08       0.08 r
+  U134/ZN (NAND3_X1)                       0.05       0.13 f
+  U135/ZN (OR2_X1)                         0.06       0.19 f
+  U136/ZN (NOR2_X1)                        0.06       0.26 r
+  intadd_0/U15/S (FA_X1)                   0.13       0.38 f
+  U137/ZN (INV_X1)                         0.03       0.41 r
+  U160/CO (FA_X1)                          0.08       0.49 r
+  U161/ZN (INV_X1)                         0.03       0.52 f
+  U172/ZN (AOI222_X1)                      0.15       0.67 r
+  U187/ZN (AOI222_X1)                      0.08       0.75 f
+  U199/ZN (AOI222_X1)                      0.16       0.91 r
+  U211/ZN (AOI222_X1)                      0.08       0.99 f
+  U223/ZN (AOI222_X1)                      0.16       1.14 r
+  U235/ZN (AOI222_X1)                      0.08       1.22 f
+  U246/ZN (AOI222_X1)                      0.16       1.38 r
+  U255/ZN (AOI222_X1)                      0.08       1.46 f
+  U264/ZN (AOI222_X1)                      0.16       1.62 r
+  U271/ZN (AOI222_X1)                      0.08       1.70 f
+  U279/ZN (AOI222_X1)                      0.16       1.85 r
+  U286/ZN (AOI222_X1)                      0.08       1.93 f
+  U291/ZN (AOI222_X1)                      0.12       2.05 r
+  U292/ZN (NOR2_X1)                        0.03       2.08 f
+  U299/ZN (OAI21_X1)                       0.06       2.14 r
+  U304/ZN (AOI21_X1)                       0.04       2.18 f
+  U309/ZN (OAI21_X1)                       0.06       2.24 r
+  U314/ZN (AOI21_X1)                       0.04       2.28 f
+  U319/ZN (OAI21_X1)                       0.06       2.34 r
+  U324/ZN (AOI21_X1)                       0.04       2.38 f
+  U329/ZN (OAI21_X1)                       0.06       2.44 r
+  U334/ZN (AOI21_X1)                       0.04       2.48 f
+  U339/ZN (OAI21_X1)                       0.06       2.54 r
+  U344/ZN (AOI21_X1)                       0.04       2.58 f
+  U349/ZN (OAI21_X1)                       0.06       2.64 r
+  U354/ZN (AOI21_X1)                       0.04       2.67 f
+  U359/ZN (OAI21_X1)                       0.06       2.74 r
+  U364/ZN (AOI21_X1)                       0.04       2.77 f
+  U368/ZN (OAI21_X1)                       0.06       2.83 r
+  U373/ZN (NAND2_X1)                       0.04       2.87 f
+  U376/ZN (AOI221_X1)                      0.10       2.97 r
+  U377/ZN (INV_X1)                         0.02       2.99 f
+  U378/ZN (AOI22_X1)                       0.05       3.04 r
+  accumulator_reg_reg[31]/D (DFF_X1)       0.01       3.05 r
+  data arrival time                                   3.05
+
+  clock main_clk (rise edge)              10.00      10.00
+  clock network delay (ideal)              0.00      10.00
+  accumulator_reg_reg[31]/CK (DFF_X1)      0.00      10.00 r
+  library setup time                      -0.04       9.96
+  data required time                                  9.96
+  -----------------------------------------------------------
+  data required time                                  9.96
+  data arrival time                                  -3.05
+  -----------------------------------------------------------
+  slack (MET)                                         6.91
+
+
+1
