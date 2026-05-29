@@ -1,5 +1,7 @@
 # A-Booth-Inspired-Approximation-on-Quantization-for-Neural-Networks
 
+[![DOI](https://zenodo.org/badge/1122199864.svg)](https://doi.org/10.5281/zenodo.20444104)
+
 This repository is part of a paper submission.
 Submitted for IEEE Access.
 Code provided under the LISCENCE attached to this repository.
