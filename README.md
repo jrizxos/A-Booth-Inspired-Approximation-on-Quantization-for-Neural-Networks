@@ -1,6 +1,6 @@
 # A-Booth-Inspired-Approximation-on-Quantization-for-Neural-Networks
 
-[![DOI](https://zenodo.org/badge/1122199864.svg)](https://doi.org/10.5281/zenodo.20444104)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23778296.svg)](https://doi.org/10.5281/zenodo.23778296)
 
 This repository is part of a paper submission.
 Submitted for IEEE Access.
@@ -51,6 +51,8 @@ Usage:
     * or make your own following the structure of one of the files above
 - Run it with the python command:
     * python \<model\>.py
+- Or use the auto-runner script to replicate the paper results (this will run multiple runs for all models and save the result data in json files):
+    * python RUNNER.py
 
 The following functions in *quantize_toolkit.py* will save their results:
 - apply_custom_quantization
