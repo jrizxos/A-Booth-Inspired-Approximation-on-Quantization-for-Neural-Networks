@@ -15,8 +15,8 @@ from torchvision.datasets import MNIST
 from torchvision.datasets import ImageNet
 from torchvision.datasets import CIFAR10
 
-from transformers import AutoTokenizer, ViTImageProcessor, DataCollatorWithPadding, WhisperForConditionalGeneration
-from datasets import load_dataset, Audio
+from transformers import AutoTokenizer, AutoFeatureExtractor, ViTImageProcessor, DataCollatorWithPadding, WhisperForConditionalGeneration
+from datasets import Dataset, load_dataset, Audio
 
 from sklearn.metrics import matthews_corrcoef, accuracy_score, average_precision_score
 from scipy.stats import pearsonr, spearmanr
@@ -26,9 +26,28 @@ from lm_eval import evaluator
 
 import evaluate
 
+import json
+
 #### Constants ##########################################################################################################################
 
 CWD = os.path.dirname(os.path.realpath(__file__))
+TRAIN_RES = os.path.join(CWD, 'results')
+
+#### Results storing ####################################################################################################################
+
+def store_results(results: dict, name: str, run_id: str) -> None:
+    dir_path = os.path.join(TRAIN_RES, name)
+    os.makedirs(dir_path, exist_ok=True)
+
+    json_path = os.path.join(dir_path, f"{run_id}.json")
+
+    try:
+        with open(json_path, "w") as outfile:
+            json.dump(results, outfile, indent=4)
+            print(f"All results stored at {json_path}")
+    except:
+        print("Error json file creation failed! Dumping results here:")
+        print(results)
 
 ##### Torch datasets ####################################################################################################################
 
@@ -56,7 +75,7 @@ def get_ImageNet(transform: transforms.Compose=None) -> tuple[DataLoader,DataLoa
     validation_dataset = ImageNet(root=root, split='val', transform=transform)
     
     train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True, num_workers=12)
-    validation_loader = DataLoader(validation_dataset, batch_size=64, shuffle=False, num_workers=12) 
+    validation_loader = DataLoader(validation_dataset, batch_size=64, shuffle=True, num_workers=12) 
     return train_loader, validation_loader
 
 def get_CIFAR(transform: transforms.Compose=None) -> tuple[DataLoader,DataLoader]:
@@ -74,7 +93,7 @@ def get_CIFAR(transform: transforms.Compose=None) -> tuple[DataLoader,DataLoader
     validation_dataset = CIFAR10(root=root, train=False, download=True, transform=transform)
 
     train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True, num_workers=8)
-    validation_loader = DataLoader(validation_dataset, batch_size=64, shuffle=False, num_workers=8)
+    validation_loader = DataLoader(validation_dataset, batch_size=64, shuffle=True, num_workers=8)
     return train_loader, validation_loader
 
 def test_nn(network: nn.Module, test_loader: DataLoader, max_batches: int=0, device: str='cpu') -> tuple[float]:
@@ -150,7 +169,7 @@ def test_vit(network: nn.Module, test_loader: DataLoader, processor: ViTImagePro
 ##### HuggingFace datasets ##############################################################################################################
 
 # glue
-def make_glue_val_loader(task_name: str, task_cfg: dict, batch_size: int = 32):
+def make_glue_val_loader(task_name: str, task_cfg: dict, batch_size: int = 32) -> DataLoader:
     max_length = task_cfg.get('max_len', 128)
     
     # Load dataset
@@ -195,7 +214,7 @@ def make_glue_val_loader(task_name: str, task_cfg: dict, batch_size: int = 32):
         collate_fn=collator,
     )
 
-def evaluate_glue(model: nn.Module, task_name: str, task_cfg: dict, device: str):
+def evaluate_glue(model: nn.Module, task_name: str, task_cfg: dict, device: str) -> float:
     model.eval()
     
     dataloader = make_glue_val_loader(task_name, task_cfg)
@@ -233,32 +252,38 @@ def evaluate_glue(model: nn.Module, task_name: str, task_cfg: dict, device: str)
     elif task_cfg['eval_func'] == 'pearson_spearman':
         pearson = pearsonr(all_labels, all_preds)[0]
         spearman = spearmanr(all_labels, all_preds)[0]
-        return (pearson + spearman) / 2
+        return float((pearson + spearman) / 2)
     else:
         raise ValueError(f'Unknown eval_func: {task_cfg['eval_func']}')
 
-def get_dataset(name: str, max_samples: int = None):
+def get_dataset(name: str, max_samples: int = None) -> Dataset:
     dataset_piqa = load_dataset(name, split='validation', trust_remote_code=True)
     if max_samples is not None:
         dataset_piqa = dataset_piqa.select(range(max_samples))
     return dataset_piqa
 
 # LM eval harness
-def eval_lm_eval_existing(model: str, tasks: list, device: str) -> float:
+def eval_lm_eval_existing(model: str, tasks: list, device: str, seed: int) -> float:
     total_acc = 0
     acc_tasks = 0
+    acc_results = {}
+
+    margs = {'pretrained':model}
+    if(model=='chestnutlzj/MoE-Qwen-4x1.8B-pretrain-50000-ckpt'):
+        margs['trust_remote_code'] = True
+        margs['prefix_token_id'] = 151643
 
     for task in tasks:
         results = evaluator.simple_evaluate(
             model='hf',
-            model_args={
-                'pretrained':model,
-                'trust_remote_code':model=='zai-org/codegeex4-all-9b'
-                },
+            model_args=margs,
             tasks=[task],
             batch_size=1,
             device=device,
-            confirm_run_unsafe_code=True
+            confirm_run_unsafe_code=True,
+            random_seed=(seed & 0xFFFFFFFF),
+            numpy_random_seed=((seed*2) & 0xFFFFFFFF),
+            torch_random_seed=((seed*3) & 0xFFFFFFFF),
         )
 
         task_res = results['results'][task]
@@ -268,6 +293,7 @@ def eval_lm_eval_existing(model: str, tasks: list, device: str) -> float:
             total_acc += acc
             acc_tasks += 1
             print(f'{task} | accuracy: {acc:.4f}')
+            acc_results[task] = acc
         else:
             print(f'Warning: {task} acc,none not included in results\n{task_res}')
         
@@ -275,20 +301,25 @@ def eval_lm_eval_existing(model: str, tasks: list, device: str) -> float:
         gc.collect()
 
     m_acc =  total_acc/acc_tasks if acc_tasks>0 else None
+    acc_results['TOTAL'] = m_acc
 
-    return m_acc
+    return acc_results
 
-def eval_lm_eval_custom(model: nn.Module, tasks: list, device: str) -> float:
+def eval_lm_eval_custom(model: HFLM, tasks: list, device: str, seed: int) -> float:
     total_acc = 0
     acc_tasks = 0
+    acc_results = {}
 
     for task in tasks:
         results = evaluator.simple_evaluate(
-            model=HFLM(pretrained=model),
+            model=model,
             tasks=[task],
             batch_size=1,
             device=device,
-            confirm_run_unsafe_code=True
+            confirm_run_unsafe_code=True,
+            random_seed=(seed & 0xFFFFFFFF),
+            numpy_random_seed=((seed*2) & 0xFFFFFFFF),
+            torch_random_seed=((seed*3) & 0xFFFFFFFF),
         )
 
         task_res = results['results'][task]
@@ -298,6 +329,7 @@ def eval_lm_eval_custom(model: nn.Module, tasks: list, device: str) -> float:
             total_acc += acc
             acc_tasks += 1
             print(f'{task} | accuracy: {acc:.4f}')
+            acc_results[task] = acc
         else:
             print(f'Warning: {task} acc,none not included in results\n{task_res}')
         
@@ -305,19 +337,21 @@ def eval_lm_eval_custom(model: nn.Module, tasks: list, device: str) -> float:
         gc.collect()
 
     m_acc =  total_acc/acc_tasks if acc_tasks>0 else None
+    acc_results['TOTAL'] = m_acc
 
-    return m_acc
+    return acc_results
 
 # ASR
-def normalize_text(text):
+def normalize_text(text: str) -> str:
     text = text.lower()
     text = re.sub(r'<\|.*?\|>', '', text)
     text = re.sub(r'[^a-z0-9\s]', '', text)
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
-def evaluate_asr(model, processor, tasks):
+def evaluate_asr(model: nn.Module, processor: any, tasks: dict) -> dict:
     wer_metric = evaluate.load('wer')
+    wer_results = {}
 
     total_wer = 0
     for task in tasks.keys():
@@ -355,11 +389,11 @@ def evaluate_asr(model, processor, tasks):
                 if len(audio['array']) < 4000: # here Wav2Vec2 for mms-large crashes for very sort samples
                     continue
                 inputs = {
-                    "input_values": inputs["input_values"].to(model.dtype).to(model.device),
-                    "attention_mask": inputs.get("attention_mask", None)
+                    'input_values': inputs['input_values'].to(model.dtype).to(model.device),
+                    'attention_mask': inputs.get('attention_mask', None)
                 }
-                if inputs["attention_mask"] is not None:
-                    inputs["attention_mask"] = inputs["attention_mask"].to(model.device)
+                if inputs['attention_mask'] is not None:
+                    inputs['attention_mask'] = inputs['attention_mask'].to(model.device)
 
                 with torch.no_grad():
                     logits = model(**inputs).logits
@@ -377,16 +411,19 @@ def evaluate_asr(model, processor, tasks):
             references=references
         )
         print(f'{task} WER: {wer:.4f}%')
+        wer_results[task] = wer
         total_wer += wer
 
-    return total_wer/len(tasks.keys())
+    wer_results['TOTAL'] = total_wer/len(tasks.keys())
+
+    return wer_results
 
 # Speech classification
-def ast_forward(model, feature_extractor, audio_array, sampling_rate):
+def ast_forward(model: nn.Module, feature_extractor: AutoFeatureExtractor, audio_array: any, sampling_rate: any) -> any:
     inputs = feature_extractor(
         audio_array,
         sampling_rate=sampling_rate,
-        return_tensors="pt"
+        return_tensors='pt'
     )
 
     inputs = {k: v.to(model.dtype).to(model.device) for k, v in inputs.items()}
@@ -394,19 +431,19 @@ def ast_forward(model, feature_extractor, audio_array, sampling_rate):
     outputs = model(**inputs)
     return outputs.logits
 
-def get_audioset():
+def get_audioset() -> Dataset:
     audioset = load_dataset(
-        "agkphysics/AudioSet",
-        "balanced",
-        split="test"
+        'agkphysics/AudioSet',
+        'balanced',
+        split='test'
     )
     audioset = audioset.cast_column(
-        "audio",
+        'audio',
         Audio(sampling_rate=16000)
     )
     return audioset
 
-def eval_audioset(model, feature_extractor, dataset):
+def eval_audioset(model: nn.Module, feature_extractor: AutoFeatureExtractor, dataset: Dataset) -> float:
     label2id = model.config.label2id
     num_classes = model.config.num_labels
 
@@ -416,7 +453,7 @@ def eval_audioset(model, feature_extractor, dataset):
     with torch.no_grad():
         for sample in tqdm(dataset):
             
-            labels = sample["human_labels"]
+            labels = sample['human_labels']
             target = np.zeros(num_classes, dtype=np.float32)
             skip = False
             for lbl in labels:
@@ -429,14 +466,14 @@ def eval_audioset(model, feature_extractor, dataset):
                 continue
             y_true.append(target)
 
-            audio = sample["audio"]
-            logits = ast_forward(model, feature_extractor, audio["array"], audio["sampling_rate"])
+            audio = sample['audio']
+            logits = ast_forward(model, feature_extractor, audio['array'], audio['sampling_rate'])
             probs = torch.sigmoid(logits).cpu().numpy()[0]
             y_scores.append(probs)
 
     y_true = np.array(y_true)
     y_scores = np.array(y_scores)
 
-    mAP = average_precision_score(y_true, y_scores, average="macro")
-    print(f"AudioSet mAP: {mAP:.4f}")
+    mAP = average_precision_score(y_true, y_scores, average='macro')
+    print(f'AudioSet mAP: {mAP:.4f}')
     return mAP

@@ -1,0 +1,8 @@
+/py_simulation/training_data
+/py_simulation/results
+/py_simulation/__pycache__
+
+/.vscode
+/.deepeval
+
+*.log

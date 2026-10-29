@@ -117,18 +117,64 @@ QUANT_LUT_AWAY_ZERO = [-127, -127, -126, -126, -124, -124, -124, -120, -120, -12
 
 BOOTH_QUANT_VALUE_TORCH = torch.tensor(QUANT_LUT_AWAY_ZERO, dtype=torch.int8)
 
-ONNX_INPUT_STATIC_NAME = 'input'
-ONNX_OUTPUT_STATIC_NAME = 'output'
+# maps an ASP2 (6-bits) to its corresponding int8
+ASP2_MAPPING = {(0, 0):   0,  (0, 1):  -1,  (0, 2):  -3,  (0, 3):  -7,  (0, 4): -15,  (0, 5): -31,  (0, 6): -63,  (0, 7): -127,
+                (1, 0):   1,                (1, 2):  -2,  (1, 3):  -6,  (1, 4): -14,  (1, 5): -30,  (1, 6): -62,  (1, 7): -126,
+                (2, 0):   3,  (2, 1):   2,                (2, 3):  -4,  (2, 4): -12,  (2, 5): -28,  (2, 6): -60,  (2, 7): -124,
+                (3, 0):   7,  (3, 1):   6,  (3, 2):   4,                (3, 4):  -8,  (3, 5): -24,  (3, 6): -56,  (3, 7): -120,
+                (4, 0):  15,  (4, 1):  14,  (4, 2):  12,  (4, 3):   8,                (4, 5): -16,  (4, 6): -48,  (4, 7): -112,
+                (5, 0):  31,  (5, 1):  30,  (5, 2):  28,  (5, 3):  24,  (5, 4):  16,                (5, 6): -32,  (5, 7):  -96,
+                (6, 0):  63,  (6, 1):  62,  (6, 2):  60,  (6, 3):  56,  (6, 4):  48,  (6, 5):  32,                (6, 7):  -64,
+                (7, 0): 127,  (7, 1): 126,  (7, 2): 124,  (7, 3): 120,  (7, 4): 112,  (7, 5):  96,  (7, 6):  64                }
+# here -128 means an invalid key, the ASP2 numbers corresponding to those indexes do not exist
+ASP2_MAPPING_LUT = torch.tensor([    0,   -1,   -3,   -7,  -15,  -31,  -63, -127,    
+                                     1, -128,   -2,   -6,  -14,  -30,  -62, -126, 
+                                     3,    2, -128,   -4,  -12,  -28,  -60, -124,    
+                                     7,    6,    4, -128,   -8,  -24,  -56, -120, 
+                                    15,   14,   12,    8, -128,  -16,  -48, -112,   
+                                    31,   30,   28,   24,   16, -128,  -32,  -96, 
+                                    63,   62,   60,   56,   48,   32, -128,  -64, 
+                                   127,  126,  124,  120,  112,   96,   64, -128 ], dtype=torch.int8)
+
+# maps an int8 to its corresponding ASP2 (6-bits)
+ASP2_INV_MAPPING = {0  : (0, 0),  -1 : (0, 1),  -3 : (0, 2),  -7 : (0, 3),  -15: (0, 4),  -31: (0, 5),  -63: (0, 6),  -127: (0, 7),
+                    1  : (1, 0),                -2 : (1, 2),  -6 : (1, 3),  -14: (1, 4),  -30: (1, 5),  -62: (1, 6),  -126: (1, 7),  
+                    3  : (2, 0),  2  : (2, 1),                -4 : (2, 3),  -12: (2, 4),  -28: (2, 5),  -60: (2, 6),  -124: (2, 7),  
+                    7  : (3, 0),  6  : (3, 1),  4  : (3, 2),                -8 : (3, 4),  -24: (3, 5),  -56: (3, 6),  -120: (3, 7),  
+                    15 : (4, 0),  14 : (4, 1),  12 : (4, 2),  8  : (4, 3),                -16: (4, 5),  -48: (4, 6),  -112: (4, 7),  
+                    31 : (5, 0),  30 : (5, 1),  28 : (5, 2),  24 : (5, 3),  16 : (5, 4),                -32: (5, 6),  -96 : (5, 7),  
+                    63 : (6, 0),  62 : (6, 1),  60 : (6, 2),  56 : (6, 3),  48 : (6, 4),  32 : (6, 5),                -64 : (6, 7),  
+                    127: (7, 0),  126: (7, 1),  124: (7, 2),  120: (7, 3),  112: (7, 4),  96 : (7, 5),  64  : (7, 6)               } 
+# here 63 means an invalid key, the int8 numbers corresponding to those indexes should be replaced by the closest representable int8
+ASP2_INV_MAPPING_LUT = torch.tensor([63,  7, 15, 63, 23, 63, 63, 63, 31, 63, 63, 63, 63, 63, 63, 63,
+                                     39, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63,
+                                     47, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63,
+                                     63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63,
+                                     55,  6, 14, 63, 22, 63, 63, 63, 30, 63, 63, 63, 63, 63, 63, 63,
+                                     38, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63,
+                                     46,  5, 13, 63, 21, 63, 63, 63, 29, 63, 63, 63, 63, 63, 63, 63,
+                                     37,  4, 12, 63, 20, 63, 63, 63, 28,  3, 11, 63, 19,  2, 10,  1, 
+                                      0,  8, 17, 16, 26, 63, 25, 24, 35, 63, 63, 63, 34, 63, 33, 32, 
+                                     44, 63, 63, 63, 63, 63, 63, 63, 43, 63, 63, 63, 42, 63, 41, 40,
+                                     53, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 
+                                     52, 63, 63, 63, 63, 63, 63, 63, 51, 63, 63, 63, 50, 63, 49, 48, 
+                                     62, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 
+                                     63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 
+                                     61, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 
+                                     60, 63, 63, 63, 63, 63, 63, 63, 59, 63, 63, 63, 58, 63, 57, 56], dtype=torch.int8)
 
 ##### General functions #################################################################################################################
 
 def produce_quant_lut_allowed():
-    vals = set()
+    mapping = {}
+    inv_mapping = {}
     for i in range(0,8):
         for j in range(0,8):
             val = 2**i - 2**j
-            vals.add(val)
-    return vals
+            if(val!=0 or i==j==0):
+                mapping[(i,j)] = val
+                inv_mapping[val] = (i,j)
+    return mapping, inv_mapping
 
 def closest_approx(x: int):
     if x in QUANT_LUT_ALLOWED:
@@ -505,7 +551,7 @@ def PTQ_quantize(network: nn.Module,
 
     model_path = os.path.join(save_dir, '_'.join(name) + '.pth')
 
-    network.to(device)
+    network.to('cpu')
     network.eval()
     network.qconfig = qconfig
 
@@ -520,10 +566,11 @@ def PTQ_quantize(network: nn.Module,
     
     with torch.no_grad():
         for i, (data, labels) in enumerate(test_loader):
-            data, labels = data.to(device), labels.to(device)
-            network.to(device)
             if(i >= observer_limit): 
                 break
+
+            data, labels = data.to('cpu'), labels.to('cpu')
+            network.to('cpu')
             network(data)
 
     torch.quantization.convert(network, inplace=True)
@@ -549,16 +596,14 @@ def QAT_quantize(network: nn.Module,
     qat_qconfig = QConfig(activation=qconfig_dict['activation'],
                           weight=qconfig_dict['weight'])
 
+    network.qconfig = qat_qconfig
+
     if(qconfig_dict['custom']):
         qat_qconfig_custom = QConfig(activation=qconfig_dict['activation'],
                                      weight=qconfig_dict['custom'])
-        for m_name, module in network.named_modules():
+        for module in network.modules():
             if isinstance(module, (nn.Linear, nn.Conv2d)):
                 module.qconfig = qat_qconfig_custom
-            else:
-                module.qconfig = qat_qconfig
-    else:
-        network.qconfig = qat_qconfig
     
     if load and os.path.exists(model_path):
         print('Loading saved model...')
@@ -646,16 +691,20 @@ def inspect_torchao(model: nn.Module, device: str, out_mode: int = 2):
             w = module.weight
             if isinstance(w, torchao.quantization.Int8Tensor):
                 int_data = w.qdata
-                mask = torch.isin(int_data, allowed)
-                invalid = int_data[~mask].unique()
-                total_invalid += len(invalid)
-                if out_mode > 0 :
-                    print(f'\nLayer: {name}')
-                    print('\tint_data dtype:', int_data.dtype)
-                    print('\tmin:', int_data.min().item())
-                    print('\tmax:', int_data.max().item())
-                    if out_mode > 1:
-                        print('Invalid values: '+str(invalid) if(len(invalid)>0) else 'No invalid values!')
+            if isinstance(w, torchao.quantization.linear_activation_quantized_tensor.LinearActivationQuantizedTensor):
+                int_data = w.original_weight_tensor.tensor_impl.__dict__['int_data'] 
+            else:
+                continue 
+            mask = torch.isin(int_data, allowed)
+            invalid = int_data[~mask].unique()
+            total_invalid += len(invalid)
+            if out_mode > 0 :
+                print(f'\nLayer: {name}')
+                print('\tint_data dtype:', int_data.dtype)
+                print('\tmin:', int_data.min().item())
+                print('\tmax:', int_data.max().item())
+                if out_mode > 1:
+                    print('Invalid values: '+str(invalid) if(len(invalid)>0) else 'No invalid values!')
     print(f'Total invalid values: {total_invalid}')
 
 def count_params_torchao(model: nn.Module):
@@ -674,31 +723,42 @@ def count_params_torchao(model: nn.Module):
             except Exception:
                 continue
 
-            if isinstance(attr, torchao.quantization.Int8Tensor):
+            if isinstance(attr, (torchao.quantization.Int8Tensor, torchao.quantization.linear_activation_quantized_tensor.LinearActivationQuantizedTensor)):
                 int8_elems += attr.numel()
 
     print(f'Total params: {total_elems}\nQuantized params: {int8_elems} ( {int8_elems*100 / total_elems:.2f}% )')
 
-def apply_custom_quantization_torchao(model: nn.Module, device: str, prints:bool=False):
-    count = 0
+def apply_custom_quantization_torchao(model: nn.Module, device: str, prints: bool = False):
+    count_layers = 0
+    count_params = 0
     quant_lut = BOOTH_QUANT_VALUE_TORCH.to(device)
 
     for _, module in model.named_modules():
-        if hasattr(module, 'weight'):
-            w = module.weight
-            if isinstance(w, torchao.quantization.Int8Tensor):
-                int_data = w.qdata
-                idx = (int_data.to(torch.int16) + 128).to(torch.int)
-                new_int_data = quant_lut[idx]
-                int_data.copy_(new_int_data)
-                count += 1
-    if(prints):
-        print(f'LUT applied to {count} quantized Linear layers')
+        if not hasattr(module, "weight"):
+            continue
+
+        w = module.weight
+        if isinstance(w, torchao.quantization.Int8Tensor):
+            int_data = w.qdata
+        elif isinstance(w,torchao.quantization.linear_activation_quantized_tensor.LinearActivationQuantizedTensor):
+            int_data = w.original_weight_tensor.tensor_impl.__dict__['int_data']
+        else:
+            continue
+
+        idx = (int_data.to(torch.int16) + 128).to(torch.long)
+        new_int_data = quant_lut[idx]
+
+        int_data.copy_(new_int_data)
+        count_layers += 1
+        count_params += len(int_data)
+
+    if prints:
+        print(f"LUT applied to {count_layers} quantized Linear layers")
 
 
 ##### bitsandbytes functions ############################################################################################################
 
-def preheat_bnb(model: nn.Module, tokenizer: any):
+def preheat_bnb(model: nn.Module, tokenizer: any, seed: int):
     ''' BNB quantized models require 'preheating' as initially all interesting parameters are None. 
     Giving it some input will materialize those parameters to not-None '''
     model.eval()
@@ -720,7 +780,7 @@ def preheat_bnb(model: nn.Module, tokenizer: any):
         elif isinstance(tokenizer, PreTrainedTokenizerBase):
             try:
                 dummy = tokenizer(
-                    'Materialize bnb weights',
+                    f'Materialize bnb weights with seed: {str(seed)}',
                     return_tensors='pt'
                 ).to(model.device)
                 model(**dummy) 
@@ -767,8 +827,8 @@ def preheat_bnb(model: nn.Module, tokenizer: any):
         
     return
 
-def inpsect_bnb(model: nn.Module, tokenizer: any):
-    preheat_bnb(model, tokenizer)
+def inpsect_bnb(model: nn.Module, tokenizer: any, seed: int):
+    preheat_bnb(model, tokenizer, seed)
 
     total_invalid = 0
     allowed = torch.tensor(QUANT_LUT_ALLOWED, device=model.device)
@@ -783,8 +843,8 @@ def inpsect_bnb(model: nn.Module, tokenizer: any):
             total_invalid += mask.sum().item()
     print(f'Total invalid values: {total_invalid}')
 
-def count_params_bnb(model: nn.Module, tokenizer: any):
-    preheat_bnb(model, tokenizer)
+def count_params_bnb(model: nn.Module, tokenizer: any, seed: int):
+    preheat_bnb(model, tokenizer, seed)
 
     total_fp_params = 0
     remaining_fp_params = 0
@@ -816,8 +876,8 @@ def count_params_bnb(model: nn.Module, tokenizer: any):
     effective_total = int8_params + scale_params + remaining_fp_params
     print(f'\nEffective parameter count (after quant): {effective_total}')
 
-def apply_custom_quantization_bnb(model: nn.Module, tokenizer: any, prints:bool=False):
-    preheat_bnb(model, tokenizer)
+def apply_custom_quantization_bnb(model: nn.Module, tokenizer: any, seed: int, prints:bool=False):
+    preheat_bnb(model, tokenizer, seed)
 
     count = 0
     quant_lut = BOOTH_QUANT_VALUE_TORCH.to(model.device)

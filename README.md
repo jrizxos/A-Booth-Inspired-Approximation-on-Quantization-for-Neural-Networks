@@ -24,6 +24,9 @@ The folder *py_simulation* contains the Python code for the simulations presente
 Usage:
 - Install requirements:
     * pip install -r requirements.txt
+- Download datasets:
+    * The first time a model that uses the **MNIST** or **CIFAR10** dataset is run, the used dataset will be **downloaded automatically** under */py_simulation/training_data*
+    * The **Imagenet** dataset it needs to be **downloaded manually** and placed under */py_simulation/training_data* as root, the required files can be found in the [torch documentation](https://docs.pytorch.org/vision/stable/generated/torchvision.datasets.ImageNet.html#torchvision.datasets.ImageNet)
 - Choose your desired neural network model:
     * Alexnet.py 
     * AST.py 
@@ -54,7 +57,7 @@ The following functions in *quantize_toolkit.py* will save their results:
 - train
 - PTQ_quantize
 - QAT_quantize
-And include a load boolean argument. Setting this argument to true, with previous results saved, will cancel any computations and load the existing results.
+And include a load boolean argument. Setting this argument to true, with previous results saved, will cancel training and load the existing results.
 
 ## Full results
 Due to space constraints in the paper, a summarized version of the results are published. The full results data are present in the *Full Results.xlsx* excel file in the root of this repository.

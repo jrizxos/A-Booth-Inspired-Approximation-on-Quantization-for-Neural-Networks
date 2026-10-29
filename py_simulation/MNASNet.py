@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 from copy import deepcopy
 import torch
@@ -16,7 +17,7 @@ from quantize_toolkit import (
     apply_custom_quantization, 
     QAT_quantize
 )
-from evaluate_toolkit import  get_ImageNet, get_CIFAR, test_nn
+from evaluate_toolkit import  get_ImageNet, get_CIFAR, test_nn, store_results
 
 class QuantizableInvertedResidual(mnasnet._InvertedResidual):
     def __init__(self, *args, **kwargs) -> None:
@@ -36,7 +37,17 @@ if __name__ == '__main__':
     DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
     os.chdir(CWD)
 
-    IMAGENET_DATASET = False
+##### Setup Result Reporting ############################################################################################################
+    result_data = {}
+    try:
+        assert(len(sys.argv) == 3)
+        run_id = 'run_' + sys.argv[1]
+        torch.manual_seed(hash(sys.argv[1]))
+        assert(sys.argv[2] in ('I', 'C'))
+        IMAGENET_DATASET = sys.argv[2] == 'I'
+    except:
+        print('ERROR: wrong system arguments, provide a \"run id\" and \"I\" for Imagenet or \"C\" for CIFAR10.')
+        exit()
 
 ##### Get Data ##########################################################################################################################
     if(IMAGENET_DATASET):
@@ -59,9 +70,9 @@ if __name__ == '__main__':
         optimizer = optim.SGD(MNASNet.parameters(), lr=0.01, momentum=0.5)
         criterion = nn.CrossEntropyLoss()
         MNASNet.train()
-        train(MNASNet, train_loader, optimizer, criterion, epochs=10, name=[model_name,'main'], load=True, device=DEVICE)
+        train(MNASNet, train_loader, optimizer, criterion, epochs=10, name=[model_name,'main',run_id], load=False, device=DEVICE)
     MNASNet.eval()
-    test_nn(MNASNet, validation_loader, device=DEVICE)
+    result_data['STD'] = test_nn(MNASNet, validation_loader, device=DEVICE)
     time_2 = time.perf_counter()
     print('(in', time_2 - time_1,'seconds)\n')
 
@@ -74,16 +85,16 @@ if __name__ == '__main__':
         ptq_net = ptq_net.to('cpu')
     ptq_qconfig = torch.quantization.default_qconfig
     time_1 = time.perf_counter()
-    PTQ_quantize(ptq_net, validation_loader, observer_limit=10, name=[model_name,'PTQ'], qconfig=ptq_qconfig, load=True, device='cpu')
-    test_nn(ptq_net, validation_loader, device='cpu')
+    PTQ_quantize(ptq_net, validation_loader, observer_limit=10, name=[model_name,'PTQ',run_id], qconfig=ptq_qconfig, load=False, device='cpu')
+    result_data['PTQ'] = test_nn(ptq_net, validation_loader, device='cpu')
     count_params(ptq_net)
     time_2 = time.perf_counter()
     print('(in', time_2 - time_1,'seconds)\n')
 
     print('\n3. Custom PTQ: ////////////////////////////////////////////////////////////\n',time.asctime())    
     time_1 = time.perf_counter()       
-    apply_custom_quantization(ptq_net, name=[model_name,'PTQ_cus'], load=False)
-    test_nn(ptq_net, validation_loader, device='cpu')
+    apply_custom_quantization(ptq_net, name=[model_name,'PTQ_cus',run_id], load=False)
+    result_data['AxCQ_PTQ'] = test_nn(ptq_net, validation_loader, device='cpu')
     time_2 = time.perf_counter()
     print('(in', time_2 - time_1,'seconds)\n')    
 
@@ -111,15 +122,15 @@ if __name__ == '__main__':
                         'custom' : None}
 
     time_1 = time.perf_counter()
-    QAT_quantize(qat_net, train_loader, optimizer, criterion, epochs=10, name=[model_name,'QAT'], qconfig_dict=qat_qconfig_dict, load=True, device=DEVICE)
-    test_nn(qat_net, validation_loader, device='cpu')
+    QAT_quantize(qat_net, train_loader, optimizer, criterion, epochs=10, name=[model_name,'QAT',run_id], qconfig_dict=qat_qconfig_dict, load=False, device=DEVICE)
+    result_data['QAT'] = test_nn(qat_net, validation_loader, device='cpu')
     time_2 = time.perf_counter()
     print('(in', time_2 - time_1,'seconds)\n')    
 
     print('\n5. Custom post-QAT: ///////////////////////////////////////////////////////\n',time.asctime())
     time_1 = time.perf_counter()
-    apply_custom_quantization(qat_net, name=[model_name,'QAT_post'], load=False)
-    test_nn(qat_net, validation_loader, device='cpu')
+    apply_custom_quantization(qat_net, name=[model_name,'QAT_post',run_id], load=False)
+    result_data['AxCQ_QAT'] = test_nn(qat_net, validation_loader, device='cpu')
     time_2 = time.perf_counter()
     print('(in', time_2 - time_1,'seconds)\n')    
 
@@ -151,13 +162,13 @@ if __name__ == '__main__':
                                         qscheme=torch.per_tensor_symmetric)}
     
     time_1 = time.perf_counter()
-    QAT_quantize(qat_net_2, train_loader, optimizer, criterion, epochs=10, name=[model_name,'QAT_in_pre'], qconfig_dict=qat_qconfig_dict, load=False, device=DEVICE)
-    test_nn(qat_net_2, validation_loader, device='cpu')
-    apply_custom_quantization(qat_net_2, name=[model_name,'QAT_in'], load=False)
-    test_nn(qat_net_2, validation_loader, device='cpu')
+    QAT_quantize(qat_net_2, train_loader, optimizer, criterion, epochs=10, name=[model_name,'QAT_in_pre',run_id], qconfig_dict=qat_qconfig_dict, load=False, device=DEVICE)
+    apply_custom_quantization(qat_net_2, name=[model_name,'QAT_in',run_id], load=False)
+    result_data['AQAT'] = test_nn(qat_net_2, validation_loader, device='cpu')
     time_2 = time.perf_counter()
     print('(in', time_2 - time_1,'seconds)\n')    
 
 ##### Finish ############################################################################################################################
     time_end = time.perf_counter()
+    store_results(result_data, model_name, run_id)
     print('Done! (in', time_end - time_start,'seconds)')

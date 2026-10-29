@@ -1,8 +1,8 @@
 import os
+import sys
 import time
 import torch
 from torch import nn, optim
-from torch.utils.data import DataLoader
 from torch.quantization import QuantStub, DeQuantStub
 from torch.ao.quantization.fake_quantize import FakeQuantize
 from torch.ao.quantization.observer import MovingAverageMinMaxObserver
@@ -17,7 +17,7 @@ from quantize_toolkit import (
     QAT_quantize
 )
 
-from evaluate_toolkit import get_MNIST, test_nn
+from evaluate_toolkit import get_MNIST, test_nn, store_results
 
 class CNN(nn.Module):
     def __init__(self, q = False):
@@ -68,6 +68,17 @@ if __name__ == '__main__':
     DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
     os.chdir(CWD)
 
+    # Setup Result Reporting ############################################################################################################
+    model_name = 'MNIST_CNN'
+    result_data = {}
+    try:
+        assert(len(sys.argv) == 2)
+        run_id = 'run_' + sys.argv[1]
+        torch.manual_seed(hash(sys.argv[1]))
+    except:
+        print('ERROR: wrong system arguments, provide a \"run id\" only.')
+        exit()
+
     # Get Data ##########################################################################################################################
     transform = transforms.Compose([
         transforms.ToTensor(),
@@ -81,11 +92,11 @@ if __name__ == '__main__':
     cnn_net = CNN()
     optimizer = optim.SGD(cnn_net.parameters(), lr=0.01, momentum=0.5)
     criterion = nn.CrossEntropyLoss()
-    test_nn(cnn_net, validation_loader)
+    result_data['STD_untrained'] = test_nn(cnn_net, validation_loader)
     
     print('\n1. Trained: ///////////////////////////////////////////////////////////////')
-    train(cnn_net, train_loader, optimizer, criterion, epochs=3, name=['MNIST_CNN','main'], load=False, device=DEVICE)
-    test_nn(cnn_net, validation_loader, device=DEVICE)
+    train(cnn_net, train_loader, optimizer, criterion, epochs=3, name=[model_name,'main',run_id], load=False, device=DEVICE)
+    result_data['STD'] = test_nn(cnn_net, validation_loader, device=DEVICE)
 
     # PTQ ###############################################################################################################################
     print('\n2. PTQ Quantized: /////////////////////////////////////////////////////////')
@@ -93,13 +104,13 @@ if __name__ == '__main__':
     state_dict = cnn_net.state_dict()
     ptq_net.load_state_dict(state_dict, strict=False)
     ptq_qconfig = torch.quantization.default_qconfig
-    PTQ_quantize(ptq_net, validation_loader, observer_limit=10, name=['MNIST_CNN','PTQ'], qconfig=ptq_qconfig, load=False, device='cpu')
-    test_nn(ptq_net, validation_loader, device='cpu')
+    PTQ_quantize(ptq_net, validation_loader, observer_limit=10, name=[model_name,'PTQ',run_id], qconfig=ptq_qconfig, load=False, device='cpu')
+    result_data['PTQ'] = test_nn(ptq_net, validation_loader, device='cpu')
     count_params(ptq_net)
 
     print('\n3. Custom PTQ: ////////////////////////////////////////////////////////////')
-    apply_custom_quantization(ptq_net, name=['MNIST_CNN','PTQ_cus'], load=False)
-    test_nn(ptq_net, validation_loader, device='cpu')
+    apply_custom_quantization(ptq_net, name=[model_name,'PTQ_cus',run_id], load=False)
+    result_data['AxCQ_PTQ'] = test_nn(ptq_net, validation_loader, device='cpu')
 
     # QAT ###############################################################################################################################
     print('\n4. QAT Quantized: /////////////////////////////////////////////////////////')
@@ -121,12 +132,12 @@ if __name__ == '__main__':
                         'custom' : None}
 
 
-    QAT_quantize(qat_net, train_loader, optimizer, criterion, epochs=3, name=['MNIST_CNN','QAT'], qconfig_dict=qat_qconfig_dict, load=False, device=DEVICE)
-    test_nn(qat_net, validation_loader, device='cpu')
+    QAT_quantize(qat_net, train_loader, optimizer, criterion, epochs=3, name=[model_name,'QAT',run_id], qconfig_dict=qat_qconfig_dict, load=False, device=DEVICE)
+    result_data['QAT'] = test_nn(qat_net, validation_loader, device='cpu')
 
     print('\n5. Custom post-QAT: ///////////////////////////////////////////////////////')
-    apply_custom_quantization(qat_net, name=['MNIST_CNN','QAT_post'], load=False) 
-    test_nn(qat_net, validation_loader, device='cpu')
+    apply_custom_quantization(qat_net, name=[model_name,'QAT_post',run_id], load=False) 
+    result_data['AxCQ_QAT'] = test_nn(qat_net, validation_loader, device='cpu')
 
     print('\n6. Custom in-QAT: ///////////////////////////////////////////////////////')
     qat_net_2 = CNN(q=True)
@@ -151,11 +162,11 @@ if __name__ == '__main__':
                                         dtype=torch.qint8,
                                         qscheme=torch.per_tensor_symmetric)}
     
-    QAT_quantize(qat_net_2, train_loader, optimizer, criterion, epochs=3, name=['MNIST_CNN','QAT_in_pre'], qconfig_dict=qat_qconfig_dict, load=False, device=DEVICE)
-    test_nn(qat_net_2, validation_loader, device='cpu')
-    apply_custom_quantization(qat_net_2, name=['MNIST_CNN','QAT_in'], load=False)
-    test_nn(qat_net_2, validation_loader, device='cpu')
+    QAT_quantize(qat_net_2, train_loader, optimizer, criterion, epochs=3, name=[model_name,'QAT_in_pre',run_id], qconfig_dict=qat_qconfig_dict, load=False, device=DEVICE)
+    apply_custom_quantization(qat_net_2, name=[model_name,'QAT_in',run_id], load=False)
+    result_data['AQAT'] = test_nn(qat_net_2, validation_loader, device='cpu')
 
     # Finish ############################################################################################################################
     time_end = time.perf_counter()
+    store_results(result_data, model_name, run_id)
     print('Done! (in', time_end - time_start,'seconds)')
