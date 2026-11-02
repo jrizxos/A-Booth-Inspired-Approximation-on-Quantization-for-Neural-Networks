@@ -1,12 +1,11 @@
 `timescale 1ns / 1ps
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Author: Ioannins Rizos
-// Design Name: ASP2 Multiply Accumulate unit testbench
-// Module Name: ASP2_tb
 //
-// Aditional comments: This RTL code is part of the paper submission: I. Rizos, G. Papatheodorou, A. Efthymiou "TODO Title"
-// Submitted for TODO Journal. Code provided under the LISCENCE attached to this repository.
+// Author: Ioannins Rizos
+// Design Name: ASP2 Multiply Accumulate unit
+// Module Name: ASP2
+//
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 module ASP2_tb();
